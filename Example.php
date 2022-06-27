@@ -11,18 +11,28 @@ use PhpParser\PrettyPrinter\Standard;
 require __DIR__ . '/vendor/autoload.php';
 
 $parserFactory = new ParserFactory();
-$lexer = new Lexer();
+$lexer = new Lexer\Emulative([
+    'usedAttributes' => [
+        'comments',
+        'startLine', 'endLine',
+        'startTokenPos', 'endTokenPos',
+    ],
+]);
 $parser = $parserFactory->create(ParserFactory::PREFER_PHP7, $lexer);
 
 $stmts = $parser->parse(file_get_contents(__DIR__ . '/some_file.php'));
 $origStmts = $stmts;
 
 $traverser = new \PhpParser\NodeTraverser();
+$traverser->addVisitor(new \PhpParser\NodeVisitor\CloningVisitor());
+$traverser->traverse($stmts);
+
+$traverser = new \PhpParser\NodeTraverser();
 $traverser->addVisitor(new class extends \PhpParser\NodeVisitorAbstract {
     public function leaveNode(\PhpParser\Node $node)
     {
         if (! $node instanceof GroupUse) {
-            return null;
+            return $node;
         }
 
         $prefix = $node->prefix->toString();
@@ -40,8 +50,8 @@ $traverser->addVisitor(new class extends \PhpParser\NodeVisitorAbstract {
 
 });
 
-$traverser->traverse($stmts);
 
+$traverser->traverse($stmts);
 
 $standard = new Standard();
 dump($standard->printFormatPreserving($stmts, $origStmts, $lexer->getTokens()));
